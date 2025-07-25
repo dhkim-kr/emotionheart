@@ -57,6 +57,8 @@ class Optim:
             sched = get_cosine_schedule_with_warmup(self.optimizer, num_warmup_steps=self.T*self.batches, num_training_steps=self.epochs*self.batches)
         elif sch == "multistepLR":
             sched = lr_scheduler.MultiStepLR(self.optimizer, milestones=[self.T], gamma=0.1)
+        elif sch == "None":
+            return None
         else:
             raise NotImplementedError(f"Unavailable scheduler: {sch}")
         return sched

@@ -115,7 +115,7 @@ if __name__ == "__main__":
 
     temp = parser.parse_args()
 
-    args = utils.get_config_args(parser, temp.dataset+'.yaml', dataset=temp.dataset)
+    args = utils.get_config_args(parser, 'config/'+temp.dataset+'.yaml', dataset=temp.dataset)
 
     args.num_edges = len(args.relation_type)
     args.num_degree = len(args.relation_type)

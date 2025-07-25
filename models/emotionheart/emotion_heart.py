@@ -39,7 +39,7 @@ logging.basicConfig(force=True, level=logging.INFO)
 
 class EmotionHeartModel(FairseqEncoderModel):
     def __init__(self, args, encoder):
-        super(EmotionHeartModel, self).__init__()
+        super().__init__(encoder)
         self.args = args
         self.pretrained_encoder = None
         self.encoder_embed_dim = args.encoder_embed_dim
@@ -140,7 +140,7 @@ class EmotionHeartModel(FairseqEncoderModel):
             graphs.append(embeddings[:, i*n_max_utterances:(i+1)*n_max_utterances, :])
 
         cnt = 0
-        if self.args.do_NCE:
+        if self.args.do_NACL:
             for i, m_source in enumerate(graphs):
                 for j, m_target in enumerate(graphs):
                     if i == j:

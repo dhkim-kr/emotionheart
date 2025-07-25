@@ -82,9 +82,6 @@ class Coach_Crossdata:
         total_test_time = 0.
         # Train
 
-        if not self.args.scheduler == "None":
-            self.scheduler = self.opt.get_scheduler(self.args.scheduler)
-
         best_epoch = 0
         best_acc_from_f1 = 0.
         for epoch in range(1, self.args.epochs + 1):
@@ -95,7 +92,7 @@ class Coach_Crossdata:
             dev_f1, dev_loss, dev_acc,_,_,dev_time= self.evaluate()
             total_dev_time += dev_time
 
-            if not self.args.scheduler == "None" and self.args.scheduler != "cosineLR_linearWarmUp" and self.args.scheduler != "cosineLR_linearWarmUp2":
+            if self.scheduler is not None and self.args.scheduler != "cosineLR_linearWarmUp" and self.args.scheduler != "cosineLR_linearWarmUp2":
                 self.scheduler.step()
 
             test_f1, test_loss, test_acc,results, graphs, test_time= self.evaluate(test=True)

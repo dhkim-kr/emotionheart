@@ -7,21 +7,19 @@ iemocap:
   save_analysis_path: "save/analysis/iemocap"
   log_in_comet: False
   experiment_in_comet: False
-  n_pretrain_dialogues: 108
-  n_pretrain_utterances: 3200
-  n_finetune_dialogues: 36
-  n_finetune_utterances: 1751
+  n_train_dialogues: 108
+  n_train_utterances: 3200
   n_valid_dialogues: 12
   n_valid_utterances: 400
   n_test_dialogues: 31
   n_test_utterances: 943
   modalities: "atv" # ["a", "t", "v", "at", "tv", "av", "atv"]
 
-  epochs: 160
-  batch_size: 4
-  scheduler: "cosineLR_linearWarmUp" # <- [None, stepLR,multistepLR, reduceLR, cyclicLR, cosineLR, cosinLR_linearWarmUp]
+  epochs: 200
+  batch_size: 12
+  scheduler: "None" #"cosineLR_linearWarmUp" # <- [None, stepLR,multistepLR, reduceLR, cyclicLR, cosineLR, cosinLR_linearWarmUp]
   T: 10 # duration of scheduler
-  learning_rate: 0.00001
+  learning_rate: 0.00003
   weight_decay: 0.001
 
   do_NACL: True
@@ -31,7 +29,6 @@ iemocap:
   do_CE: True
   do_WCE : False
 
-
   topk: 3
   at_NCE_lambda: 1
   tv_NCE_lambda: 1
@@ -39,12 +36,12 @@ iemocap:
   multimodal_MNA_lambda: 0.1
   multimodal_MAE_lambda: 1
 
-  temperature: 0.5
+  temperature: 0.7
   max_grad_value: -1
-  dropout: 0.5
+  dropout: 0.3
   attention_dropout: 0.
 
-  emotion: "4class"
+  emotion: "6class"
   centrality: "degree"
   act_dropout: 0.0
   max_nodes: 500
@@ -59,13 +56,7 @@ iemocap:
   sub_classifier_dim: 128
   num_classes: 6
 
-  do_mask: False
-  mask_prob_v: 0.7
-  mask_prob_a: 0.7
-  mask_prob_t: 0.7
-
   specific : False # model-specific or -agnostic encoder
-  do_MIM: False
 
   edge_type: multi_hop # single_hop, multi_hop
   share_encoder_input_output_embed: False # share encoder input and output embeddings"
