@@ -3,11 +3,7 @@
 config/GSMCC
 models/Ada2I
 models/GSMCC
-data/iemocap
-data/iemocap_4
-data/meld
-data/mosei
-graphdata/
+data/
 save/
 log/
 model_checkpoints/
