@@ -19,37 +19,136 @@ class MIM_loss(nn.Module):
             if m.bias is not None:
                 m.bias.data.fill_(0.0)
 
-    def forward(self, c, embed, targets, positive_padding_mask):
-        B, F = c.shape[0], c.shape[1]
-        N = embed.shape[1]
+    # def forward(self, c, embed, positive_valid_mask):
+    #     B, N, _ = embed.shape
+    #     device = embed.device
+    #
+    #     # L2 정규화
+    #     c = F.normalize(c, p=2, dim=-1)
+    #     embed = F.normalize(embed, p=2, dim=-1)
+    #
+    #     # 모든 노드와 모든 그래프 요약 간의 점수(코사인 유사도) 계산
+    #     all_logits = torch.einsum('bnf,df->bnd', embed, c)
+    #
+    #     # Temperature 적용
+    #     all_logits /= self.temperature
+    #
+    #     # CrossEntropyLoss를 위한 형태로 변환 (B*N, B)
+    #     all_logits = all_logits.view(-1, B)
+    #
+    #     # 정답 레이블 생성
+    #     labels = torch.arange(B, device=device).repeat_interleave(N)
+    #
+    #     # 손실 계산 (CrossEntropyLoss는 Softmax와 log를 모두 포함)
+    #     loss = F.cross_entropy(all_logits, labels, reduction='none')
+    #
+    #     # 유효한 노드에 대해서만 마스킹
+    #     valid_mask = positive_valid_mask.view(-1)
+    #     masked_loss = loss[valid_mask]
+    #
+    #     return torch.mean(masked_loss) if masked_loss.numel() > 0 else torch.tensor(0.0).to(device)
 
-        # Apply bilinear function to graph summary and node features
-        c_p = torch.unsqueeze(c, 1) # B*1*F
-        c_p = c_p.expand_as(embed) # B*N*F
 
-        positive_sims = torch.squeeze(self.f_k(embed, c_p), -1) / self.temperature # B*N
+    # def forward(self, c, embed, positive_valid_mask):
+    #     B, N, _ = embed.shape
+    #     device = embed.device
+    #
+    #     # ❗❗❗ L2 정규화(Normalization) 추가 ❗❗❗
+    #     # 각 임베딩 벡터의 크기를 1로 만들어 줍니다.
+    #     c = F.normalize(c, p=2, dim=-1)
+    #     embed = F.normalize(embed, p=2, dim=-1)
+    #
+    #     # 1. 모든 노드와 모든 그래프 요약 간의 점수(코사인 유사도) 계산
+    #     #    (이제 내적 연산이 코사인 유사도와 같아짐)
+    #     all_logits = torch.einsum('bnf,df->bnd', embed, c)
+    #
+    #     # 2. Temperature 적용
+    #     all_logits /= self.temperature
+    #
+    #     # 3. CrossEntropyLoss를 위한 형태로 변환
+    #     all_logits = all_logits.view(-1, B)
+    #
+    #     # 4. 정답 레이블 생성
+    #     labels = torch.arange(B, device=device).repeat_interleave(N)
+    #
+    #     # 5. 손실 계산
+    #     loss = F.cross_entropy(all_logits, labels, reduction='none')
+    #
+    #     # 6. 유효한 노드에 대해서만 손실을 평균내기 위한 마스크 적용
+    #     valid_mask = positive_valid_mask.view(-1)
+    #     masked_loss = loss[valid_mask]
+    #
+    #     return torch.mean(masked_loss) if masked_loss.numel() > 0 else torch.tensor(0.0).to(device)
 
-        # Expand graph_summary to match the shape for batch-wise comparison
-        c_n = c.unsqueeze(1).unsqueeze(2).expand(B, B, N, F)# B*B*N*F
+    def forward(self, c, embed, positive_valid_mask):
 
-        e_n = embed.unsqueeze(0).expand(B, B, N, F)# B*B*N*F
+        B, N,_ = embed.shape
+        device = embed.device
 
-        # Create mask to exclude positive samples (diagonal elements)
-        negative_mask = ~torch.eye(B, dtype=bool).unsqueeze(-1).unsqueeze(-1).expand(B, B, N, F)   # B*B*N*F
+        # 1. 긍정 쌍 점수 계산 (기존과 동일)
+        c_expanded = c.unsqueeze(1).expand_as(embed)
+        positive_logits = torch.squeeze(self.f_k(embed, c_expanded), -1)  # Shape: (B, N)
 
-        # Calculate negative samples using the bilinear function
-        negative_sims = torch.squeeze(self.f_k(e_n[negative_mask].view(B,-1,F), c_n[negative_mask].view(B,-1,F)), -1) / self.temperature # B*B*N*F -> B*{B*(N-1)}*F ->  B*{(B-1)*N}
+        # 2. 부정 쌍 샘플링 (배치를 섞는 방식)
+        # 배치 내에서 순서를 섞어 '잘못된' 노드 임베딩 생성
+        shuffled_indices = torch.randperm(B).to(device)
+        negative_embed = embed[shuffled_indices]
 
-        # Concatenate positive and negative samples
-        scores = torch.cat((positive_sims, negative_sims), 1) # B*(B*N)
+        # 3. 부정 쌍 점수 계산
+        negative_logits = torch.squeeze(self.f_k(negative_embed, c_expanded), -1)  # Shape: (B, N)
 
-        loss = self.BCEloss(scores, targets) # B*(B*N)
+        # 4. 긍정/부정 점수 및 레이블 통합
+        # 긍정 점수와 부정 점수를 하나로 합침
+        all_logits = torch.cat((positive_logits, negative_logits), dim=0)  # Shape: (2*B, N)
+        all_logits /= self.temperature
 
-        negative_padding_mask = positive_padding_mask.unsqueeze(0).expand(B,B,N) # B*N -> B*B*N
-        negative_padding_mask = negative_padding_mask[negative_mask[:,:,:,0]].view(B,-1) # B*B*N -> B*{(B-1)*N}
-        padding_mask = ~torch.cat((positive_padding_mask, negative_padding_mask), -1)
+        # 긍정 레이블(1)과 부정 레이블(0) 생성
+        positive_labels = torch.ones_like(positive_logits)
+        negative_labels = torch.zeros_like(negative_logits)
+        all_labels = torch.cat((positive_labels, negative_labels), dim=0)  # Shape: (2*B, N)
 
-        return torch.nanmean(loss[padding_mask])
+        # 5. 손실 계산
+        loss = self.BCEloss(all_logits, all_labels)
+
+        # 6. 유효한 노드에 대해서만 손실을 평균내기 위한 마스크 적용
+        valid_mask = positive_valid_mask.repeat(2, 1)  # 긍정/부정 쌍 모두에 마스크 적용
+
+        # 마스크가 True인 위치의 loss 값만 가져와 평균 계산
+        masked_loss = loss[valid_mask]
+
+        return torch.mean(masked_loss) if masked_loss.numel() > 0 else torch.tensor(0.0).to(device)
+
+    # def forward(self, c, embed, targets, positive_valid_mask):
+    #     B, F = c.shape[0], c.shape[1]
+    #     N = embed.shape[1]
+    #
+    #     # Apply bilinear function to graph summary and node features
+    #     c_p = torch.unsqueeze(c, 1) # B*1*F
+    #     c_p = c_p.expand_as(embed) # B*N*F
+    #
+    #     positive_sims = torch.squeeze(self.f_k(embed, c_p), -1) / self.temperature # B*N
+    #
+    #     # Expand graph_summary to match the shape for batch-wise comparison
+    #     c_n = c.unsqueeze(1).unsqueeze(2).expand(B, B, N, F)# B*B*N*F
+    #
+    #     e_n = embed.unsqueeze(0).expand(B, B, N, F)# B*B*N*F
+    #
+    #     # Create mask to exclude positive samples (diagonal elements)
+    #     negative_mask = ~torch.eye(B, dtype=bool).unsqueeze(-1).unsqueeze(-1).expand(B, B, N, F).to(embed.device)   # B*B*N*F
+    #
+    #     # Calculate negative samples using the bilinear function
+    #     negative_sims = torch.squeeze(self.f_k(e_n[negative_mask].view(B,-1,F), c_n[negative_mask].view(B,-1,F)), -1) / self.temperature # B*B*N*F -> B*{B*(N-1)}*F ->  B*{(B-1)*N}
+    #
+    #     # Concatenate positive and negative samples
+    #     scores = torch.cat((positive_sims, negative_sims), 1) # B*(B*N)
+    #
+    #     loss = self.BCEloss(scores, targets) # B*(B*N)
+    #
+    #     negative_valid_mask = positive_valid_mask.unsqueeze(0).expand(B,B,N) # B*N -> B*B*N
+    #     negative_valid_mask = negative_valid_mask[negative_mask[:,:,:,0]].view(B,-1) # B*B*N -> B*{(B-1)*N}
+    #     valid_mask = torch.cat((positive_valid_mask, negative_valid_mask), -1)
+    #
+    #     return torch.nanmean(loss[valid_mask])
 
 class triadic_infoNCE_loss(nn.Module):
     def __init__(self, temperature):
@@ -139,8 +238,7 @@ class infoNCE_loss(nn.Module):
 
         loss = -torch.log((numerator + eps) / (denominator + eps))
 
-        loss_mask = ~mask[:, :, 0]
-        return torch.nanmean(loss[loss_mask])
+        return torch.nanmean(loss)
 
     def forward(self, z1: torch.Tensor, z2: torch.Tensor, mask):
         ret = self.semi_loss(z1, z2, mask)
