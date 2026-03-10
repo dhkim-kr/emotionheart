@@ -166,7 +166,7 @@ if __name__ == "__main__":
         "--dataset",
         type=str,
         # required=True,
-        default="iemocap",
+        default="meld",
         choices=["iemocap", "meld"],
         help="Dataset name."
     )
