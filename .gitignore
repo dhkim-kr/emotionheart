@@ -7,7 +7,11 @@ data/
 save/
 log/
 model_checkpoints/
-
+plot.py
+meld_data_split.py
+meld_data_analysis.py
+iemocap_data_analysis.py
+iemocap_data_split.py
 
 
 ### Python template
