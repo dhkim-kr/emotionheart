@@ -28,7 +28,7 @@ meld:
 
   do_NACL: False
   do_DGI: False
-  do_CLIP: False
+  do_CLIP: True
 
   do_CE: True
   do_WCE : False
