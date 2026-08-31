@@ -27,24 +27,10 @@ class Coach:
 
         self.dataset_label_dict = {
             "iemocap": {"hap": 0, "sad": 1, "neu": 2, "ang": 3, "exc": 4, "fru": 5},
-            "iemocap_4": {"hap": 0, "sad": 1, "neu": 2, "ang": 3},
-            "mosei": {"Negative": 0, "Positive": 1},
             "meld": {'neu': 0, 'sur': 1, 'fea': 2, 'sad': 3, 'joy': 4, 'dis': 5, 'ang': 6}
-
         }
 
-        if args.emotion == "mosei_7":
-            self.label_to_idx = {
-                "Strong Negative": 0,
-                "Weak Negative": 1,
-                "Negative": 2,
-                "Neutral": 3,
-                "Positive": 4,
-                "Weak Positive": 5,
-                "Strong Positive": 6,
-            }
-        else:
-            self.label_to_idx = self.dataset_label_dict[args.dataset]
+        self.label_to_idx = self.dataset_label_dict[args.dataset]
 
         self.best_dev_f1 = None
         self.best_dev_acc = None
@@ -104,7 +90,7 @@ class Coach:
 
             if test_f1 > btf1:
                 torch.save(self.model,
-                           f"./{self.args.save_model_checkpoint}/{self.args.modalities}_best_model.pt")
+                           os.path.join(self.args.save_model_checkpoint, f"{self.args.modalities}_best_model.pt"))
                 np.save(os.path.join(os.getcwd(), self.args.save_analysis_path,
                                      'train_' + self.args.modalities + "_golds_preds.npy"), results)
                 np.save(os.path.join(os.getcwd(), self.args.save_analysis_path,
@@ -149,13 +135,6 @@ class Coach:
 
             utils.plot_and_save_loss(train_losses, dev_losses, test_losses, filename=save_loss_plot_path)
 
-            # if self.args.experiment_in_comet:
-            #     self.experiment.log_metric("F1 Score (Dev)", dev_f1, epoch=epoch)
-            #     self.experiment.log_metric("ACC Score (Dev)", dev_acc, epoch=epoch)
-            #     self.experiment.log_metric("F1 Score (Test)", test_f1, epoch=epoch)
-            #     self.experiment.log_metric("train_loss", train_loss, epoch=epoch)
-            #     self.experiment.log_metric("val_loss", dev_loss, epoch=epoch)
-
         # The best
 
         self.model.load_state_dict(best_state)
@@ -166,13 +145,10 @@ class Coach:
         test_f1, _, test_acc,results, _,_, _, _ = self.evaluate(test=True)
         self.experiment.info("[Test set] f1 {}".format(test_f1))
         self.experiment.info(f"\n['Hid Test f1 {btf1} \n acc {bta}]")
-        if self.args.log_in_comet:
-            self.experiment.log_metric("best_dev_f1", best_dev_f1, epoch=epoch)
-            self.experiment.log_metric("best_test_f1", best_test_f1, epoch=epoch)
 
         print(f"train_time: {total_train_time} / dev_time: {total_dev_time} / test_time: {total_test_time}")
-        print(f"Average - train_time: {total_train_time/self.args.epochs} / dev_time: {total_dev_time/self.args.epochs} / test_time: {total_test_time}/sef.args.epochs")
-    
+        print(f"Average - train_time: {total_train_time/self.args.epochs} / dev_time: {total_dev_time/self.args.epochs} / test_time: {total_test_time/self.args.epochs}")
+
         return best_dev_f1, best_dev_acc, best_epoch, best_state, train_losses, dev_losses, dev_f1s, test_f1s, dev_accs, test_accs, test_losses
 
     def train_epoch(self, epoch):
@@ -289,128 +265,4 @@ class Coach:
                     )
                 )
 
-                if self.args.log_in_comet:
-                    self.experiment.log_confusion_matrix(
-                        golds,
-                        preds,
-                        labels=list(self.label_to_idx.keys()),
-                        overwrite=True,
-                    )
-
         return f1, dev_loss, acc, results, graphs, fused_emb_numpy, init_emb_numpy, eval_time
-
-    def unimodal_inference(self):
-
-        self.experiment.debug(self.model)
-        # Early stopping.
-        best_dev_f1, best_epoch, best_state = (
-            self.best_dev_f1,
-            self.best_epoch,
-            self.best_state,
-        )
-        best_dev_acc = self.best_dev_acc
-        dev_accs = []
-        dev_f1s = []
-        test_f1s = []
-        test_accs = []
-        train_losses = []
-        dev_losses = []
-        test_losses = []
-        best_test_f1 = None
-        btf1 = 0.
-        bta = 0.
-        total_train_time = 0.
-        total_dev_time = 0.
-        total_test_time = 0.
-        # Train
-
-        best_epoch = 0
-        best_acc_from_f1 = 0.
-        for epoch in range(1, self.args.epochs + 1):
-            train_loss, train_time = self.train_epoch(epoch)
-            total_train_time += train_time
-
-            self.trainset.set_batch()
-            dev_f1, dev_loss, dev_acc, _, _, _, _, dev_time = self.evaluate()
-            total_dev_time += dev_time
-
-            if self.scheduler is not None and self.args.scheduler != "cosineLR_linearWarmUp" and self.args.scheduler != "cosineLR_linearWarmUp2":
-                self.scheduler.step()
-
-            test_f1, test_loss, test_acc, results, graphs, fused_emb, init_emb, test_time = self.evaluate(test=True)
-            total_test_time += test_time
-
-            current_lr = self.opt.get_lr()
-            print(f"Epoch {epoch + 1}/{self.args.epochs}, LR: {current_lr:.8f}, Loss: {test_loss:.4f}")
-
-            if test_f1 > btf1:
-                torch.save(self.model,
-                           f"./{self.args.save_model_checkpoint}/{self.args.modalities}_best_model.pt")
-                np.save(os.path.join(os.getcwd(), self.args.save_analysis_path,
-                                     'train_' + self.args.modalities + "_golds_preds.npy"), results)
-                np.save(os.path.join(os.getcwd(), self.args.save_analysis_path,
-                                     'train_' + self.args.modalities + "_graphs.npy"), graphs)
-                np.save(os.path.join(os.getcwd(), self.args.save_analysis_path,
-                                     'train_' + self.args.modalities + "_fused_emb.npy"), fused_emb)
-                np.save(os.path.join(os.getcwd(), self.args.save_analysis_path,
-                                     'train_' + self.args.modalities + "_init_emb.npy"), init_emb)
-                self.experiment.info("Gold standard, Predictions, atv_graphs are saved as numpy array.")
-                best_epoch = epoch
-                btf1 = test_f1
-                best_acc_from_f1 = test_acc
-            self.experiment.info(f"[best_test_f1]:{btf1}, [best_test_acc]:{best_acc_from_f1}, [epoch]:{best_epoch}")
-
-            bta = test_acc if test_acc > bta else bta
-
-            self.experiment.info("[Dev set] [f1 {:.4f}]".format(dev_f1))
-            if best_dev_f1 is None or dev_f1 > best_dev_f1:
-                best_dev_f1 = dev_f1
-                best_state = self.model.state_dict()
-
-            self.experiment.info("[Dev set] [acc {:.4f}]".format(dev_acc))
-            if best_dev_acc is None or dev_acc > best_dev_acc:
-                best_dev_acc = dev_acc
-
-                self.experiment.info("Save the best emotion_heart model.")
-            self.experiment.info("[Test set] [f1 {:.4f}]".format(test_f1))
-            self.experiment.info("[Test set] [acc {:.4f}]".format(test_acc))
-
-            dev_f1s.append(dev_f1)
-            dev_accs.append(dev_acc)
-            test_f1s.append(test_f1)
-            test_accs.append(test_acc)
-            train_losses.append(train_loss)
-            dev_losses.append(dev_loss)
-            test_losses.append(test_loss)
-
-            save_loss_plot_path = os.path.join(os.getcwd(), self.args.save_analysis_path,
-                                               'train_' + self.args.modalities + "_loss_plot.png")
-
-            utils.plot_and_save_loss(train_losses, dev_losses, test_losses, filename=save_loss_plot_path)
-
-            # if self.args.experiment_in_comet:
-            #     self.experiment.log_metric("F1 Score (Dev)", dev_f1, epoch=epoch)
-            #     self.experiment.log_metric("ACC Score (Dev)", dev_acc, epoch=epoch)
-            #     self.experiment.log_metric("F1 Score (Test)", test_f1, epoch=epoch)
-            #     self.experiment.log_metric("train_loss", train_loss, epoch=epoch)
-            #     self.experiment.log_metric("val_loss", dev_loss, epoch=epoch)
-
-        # The best
-
-        self.model.load_state_dict(best_state)
-        self.experiment.info("")
-        self.experiment.info("Best in epoch {}:".format(best_epoch))
-        dev_f1, _, dev_acc, _, _, _, _ = self.evaluate()
-        self.experiment.info("[Dev set] [f1 {:.4f}]".format(dev_f1))
-        test_f1, _, test_acc, results, _, _, _ = self.evaluate(test=True)
-        self.experiment.info("[Test set] f1 {}".format(test_f1))
-        self.experiment.info(f"\n['Hid Test f1 {btf1} \n acc {bta}]")
-        if self.args.log_in_comet:
-            self.experiment.log_metric("best_dev_f1", best_dev_f1, epoch=epoch)
-            self.experiment.log_metric("best_test_f1", best_test_f1, epoch=epoch)
-
-        print(f"train_time: {total_train_time} / dev_time: {total_dev_time} / test_time: {total_test_time}")
-        print(
-            f"Average - train_time: {total_train_time / self.args.epochs} / dev_time: {total_dev_time / self.args.epochs} / test_time: {total_test_time}/sef.args.epochs")
-
-        return best_dev_f1, best_dev_acc, best_epoch, best_state, train_losses, dev_losses, dev_f1s, test_f1s, dev_accs, test_accs, test_losses
