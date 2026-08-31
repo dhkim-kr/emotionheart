@@ -1,9 +1,9 @@
-from torch.utils.data import DataLoader, Dataset
-import numpy as np
+import os
 import pickle
+
 import torch
-import pandas as pd
 from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader, Dataset
 
 class MELDDataset(Dataset):
     def __init__(self, path, indices=None):
@@ -47,16 +47,19 @@ def get_MELD_loaders(batch_size, data_path, num_workers=0, pin_memory=False):
     test_idx = data[9]
     all_idx = all_keys
 
-    # 필요한 데이터만 포함한 새로운 MELDDataset 생성
-    train_dataset = MELDDataset('data/meld/MELD_features_raw1.pkl', train_idx)
+    # data_path (data_meld.pkl) provides the split indices; the raw multimodal
+    # features live in MELD_features_raw1.pkl next to it.
+    features_path = os.path.join(os.path.dirname(data_path), 'MELD_features_raw1.pkl')
+
+    train_dataset = MELDDataset(features_path, train_idx)
     if len(valid_idx) > 0:
-        valid_dataset = MELDDataset('data/meld/MELD_features_raw1.pkl', valid_idx)
+        valid_dataset = MELDDataset(features_path, valid_idx)
         valid_loader = DataLoader(valid_dataset, batch_size=batch_size, collate_fn=collate_fn,
                                   num_workers=num_workers, pin_memory=pin_memory)
     else:
         valid_loader = None
-    test_dataset = MELDDataset('data/meld/MELD_features_raw1.pkl', test_idx)
-    all_dataset = MELDDataset('data/meld/MELD_features_raw1.pkl', all_idx)
+    test_dataset = MELDDataset(features_path, test_idx)
+    all_dataset = MELDDataset(features_path, all_idx)
 
     # DataLoader 설정
     train_loader = DataLoader(train_dataset, batch_size=batch_size, collate_fn=collate_fn,
